@@ -20,13 +20,13 @@ def main(MaxIter=5000):
 
         new_state, reward, done = env.step(action)
 
-        actor_critic.remember(cur_state, action, new_state, reward, done)
+        actor_critic.remember(cur_state, action, reward, new_state, done)
 
         actor_critic.train()
 
         cur_state = new_state
 
-    actor_critic.metricas()
+    actor_critic.metrics()
 
 
 if __name__ == "__main__":
