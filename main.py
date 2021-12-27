@@ -18,7 +18,7 @@ def main(MaxIter=5000):
         print(bad_pos)
         env.show_state(cur_state)
 
-        new_state, reward, done = env.step(action)
+        new_state, reward, done = env.step(action)  
 
         actor_critic.remember(cur_state, action, reward, new_state, done)
 
@@ -27,7 +27,6 @@ def main(MaxIter=5000):
         cur_state = new_state
 
     actor_critic.metrics()
-
 
 if __name__ == "__main__":
 	main(MaxIter)

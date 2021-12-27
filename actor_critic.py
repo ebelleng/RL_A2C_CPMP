@@ -73,12 +73,12 @@ class ActorCritic:
 
     def act(self, cur_state, possible_actions):
         # Encargada de elegir la accion segun su politica
-        # Fase 1: greedy 
+        # Fase 1: greedy recorrer secuencia del greedy (retorna lista acciones)
         # Fase 2: bellman
 
-        # Dos modelos (redes): 
-        # 1. Predecir origen
-        # 2. Predecir detino
+        # actor evlua accciones segun recom acum.
+        # 1. Predecir origen (input: cur_state)
+        # 2. Predecir detino (input: origen, cur_state)
         origen = 0
         destino = 0
         return (origen, destino)
