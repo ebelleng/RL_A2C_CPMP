@@ -11,7 +11,7 @@ class ActorCritic:
         # Calculate de/dA as = de/dC * dC/dA, where e is error, C critic, A act #
         # ===================================================================== #
         
-        # atributos del modelo de actor
+        self.memory = []
 
         # ===================================================================== #
         #                              Critic Model                             #
@@ -31,8 +31,8 @@ class ActorCritic:
     #                               Model Training                              #
     # ========================================================================= #
 
-    def remember(self, cur_state, action, new_state, reward, done):
-        return
+    def remember(self, cur_state, action, reward, new_state, done):
+        self.memory.append([cur_state, action, reward, new_state, done])
 
     def _train_actor(self):
         return
@@ -72,11 +72,24 @@ class ActorCritic:
     # ========================================================================= #
 
     def act(self, cur_state, possible_actions):
-        self.epsilon *= self.epsilon_decay
-        if np.random.random() < self.epsilon:
-            return self.env.action_space.sample()
-        return self.actor_model.predict(cur_state)
+        # Encargada de elegir la accion segun su politica
+        # Fase 1: greedy 
+        # Fase 2: bellman
 
+        # Dos modelos (redes): 
+        # 1. Predecir origen
+        # 2. Predecir detino
+        origen = 0
+        destino = 0
+        return (origen, destino)
+    
+    # ========================================================================= #
+    #                              Model Predictions                            #
+    # ========================================================================= #
+
+    def metrics():
+        return 
+        
     # ========================================================================= #
     #                                Debug                                      #
     # ========================================================================= #

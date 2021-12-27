@@ -13,6 +13,7 @@ El estado corresponde a "la situación actual" del ambiente y entrega toda la in
 Para nuestro problema en particular, está ideado para el "Container Pre-marshalling Problem", lo que significa que nuestro ambiente será una serie de pilas con contenedores en ellas.
 
 ![Figura 1: Escenario con 7 containers](img/fig1.png)
+**Figura 1**: Escenario con 7 containers
 
 ### Aprendizaje reforzado
 
@@ -26,11 +27,9 @@ Se diseñará un agente que aprenda mediante recompensas, para ello se utilizar�
 la ecuación de bellman como politica de elección de acciones.
 
 #### Estados
-Para modelar los estados se utilizó una lista de pilas (stacks). Por ejemplo, la representación de la Figura 1 sería
+Para modelar los estados se utilizó una lista de pilas (stacks). Por ejemplo, la representación de la **Figura 1** sería
 
     [[1], [1], [4, 6, 5], [7, 3]]
-
-
 
 #### Acciones
 
