@@ -13,6 +13,7 @@ El estado corresponde a "la situación actual" del ambiente y entrega toda la in
 Para nuestro problema en particular, está ideado para el "Container Pre-marshalling Problem", lo que significa que nuestro ambiente será una serie de pilas con contenedores en ellas.
 
 ![Figura 1: Escenario con 7 containers](img/fig1.png)
+
 **Figura 1**: Escenario con 7 containers
 
 ### Aprendizaje reforzado

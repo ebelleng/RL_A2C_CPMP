@@ -38,6 +38,10 @@ class ActorCritic:
         return
 
     def _train_critic(self):
+        # prefecir accion
+        # predecir reward
+        # entrenar el modelo
+        
         return
 
     def train(self):
