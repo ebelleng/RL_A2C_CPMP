@@ -1,14 +1,43 @@
-import layout as ly
+import copy
 import actor_critic as ac
-MaxIter = 5000
+from enviroment import Enviroment
+from greedy import greedy_solve
 
-def main(MaxIter=5000):
-    S, H = (4,4)
-    env = ly.Enviroment(S,H)
+MaxIter = 5000
+GreedyIter = 2500
+
+def main():
+    S, H = (5,7)
+    env = Enviroment(S,H)
     actor_critic = ac.ActorCritic(env)
 
-    cur_state = env.create_env(N=7)
-    env.show_state(cur_state)
+    # Loop de entrenamiento mediante Greedy
+    for _ in range(1):
+        layout = env.create_env(N=20)
+        layout_copy = copy.deepcopy(layout)
+
+        actions = greedy_solve(layout) # Se consigue la lista de acciones que permiten resolver el layout
+
+        initial_state = layout_copy.stacks
+        solved_state = layout.stacks
+        env.show_state(initial_state)
+        print(f"actions: {actions}")
+        env.show_state(solved_state)
+
+        env.layout = layout_copy # Se vuelve al estado original del layout antes de ser resuelto
+
+        for action in actions:
+            cur_state = copy.deepcopy(env.layout.stacks)
+            new_state, reward, done = env.step(action)
+
+            print(f"cur_state:", cur_state)
+            print("action:", action)
+            print(f"new_state:", new_state)
+
+            actor_critic.remember(cur_state, action, reward, new_state, done)
+            actor_critic.train()
+
+    layout = env.create_env(N=20)
 
     for epoch in range(MaxIter):
         possible_actions = env.get_actions(cur_state)
@@ -29,4 +58,4 @@ def main(MaxIter=5000):
     actor_critic.metrics()
 
 if __name__ == "__main__":
-	main(MaxIter)
+	main()
