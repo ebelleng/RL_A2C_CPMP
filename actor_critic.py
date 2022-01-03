@@ -72,7 +72,6 @@ class ActorCritic:
     # ========================================================================= #
 
     def remember(self, cur_state, action, reward, new_state, done):
-        print(action)
         self.memory.append([cur_state, action, reward, new_state, done])
 
     def _train_actor(self, samples):
@@ -157,3 +156,51 @@ class ActorCritic:
 
     def get_memory(self):
         return self.memory
+
+    def print_memory(self):
+        for m in self.memory:
+            cur_state, action, reward, new_state, done = m
+            print(f'cur_state: {cur_state}')
+            print(f'action: {action}')
+            print(f'reward: {reward}')
+            print(f'new_state: {new_state}')
+            print(f'done: {done}')
+            print()
+
+    def save_memory(self):
+        list_state = []
+        list_action = []
+        list_reward = []
+        list_new_state = []
+        list_done = []
+        for m in self.memory:
+            cur_state, action, reward, new_state, done = m
+            list_state.append(cur_state)
+            list_action.append(action)
+            list_reward.append(reward)
+            list_new_state.append(new_state)
+            list_done.append(done)
+        
+        np.savez_compressed('data.npz', LS=list_state, LA=list_action,
+                            LR=list_reward, LN=list_new_state, LD=list_done)
+
+    def load_memory(self):
+        data = np.load('data.npz', allow_pickle=True)
+        
+        list_state = data['LS']
+        list_action = data['LA']
+        list_reward = data['LR']
+        list_new_state = data['LN']
+        list_done = data['LD']
+
+        print((list_reward[0]))
+        print((list_done[0]))
+
+        for i in range(len(list_state)):
+            cur_state = list(map(list, list_state[i]))
+            action    = tuple(list_action[i])
+            reward    = list_reward[i]
+            new_state = list(map(list, list_new_state[i]))
+            done      = list_done[i]
+
+            self.remember(cur_state, action, reward, new_state, done)

@@ -36,9 +36,14 @@ def main():
             print(f"new_state:", new_state)
 
             actor_critic.remember(cur_state, action, reward, new_state, done)
-            actor_critic.train()
+            #actor_critic.train()
+
+        actor_critic.print_memory()
+        actor_critic.save_memory()
+        actor_critic.load_memory()
+        return
         # savetxt('data.csv', data, delimiter=',')
-        np.savetxt('memory.csv', np.array(actor_critic.get_memory()), delimiter=',')
+        #np.savetxt('memory.csv', map(np.array, actor_critic.get_memory() ), delimiter=',')
 
     layout = env.create_env(N=20)
 
