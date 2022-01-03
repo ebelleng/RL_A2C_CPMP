@@ -2,6 +2,7 @@ import copy
 import actor_critic as ac
 from enviroment import Enviroment
 from greedy import greedy_solve
+import numpy as np
 
 MaxIter = 5000
 GreedyIter = 2500
@@ -36,6 +37,8 @@ def main():
 
             actor_critic.remember(cur_state, action, reward, new_state, done)
             actor_critic.train()
+        # savetxt('data.csv', data, delimiter=',')
+        np.savetxt('memory.csv', np.array(actor_critic.get_memory()), delimiter=',')
 
     layout = env.create_env(N=20)
 
