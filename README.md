@@ -33,17 +33,31 @@ Para modelar los estados se utilizó una lista de pilas (stacks). Por ejemplo, l
     [[1], [1], [4, 6, 5], [7, 3]]
 
 #### Acciones
+Las acciones son representadas por una tupla de dos elementos, siendo el primero el stack de origen y en segundo, el stack de destino
 
+    (0, 3) : Se mueve container de la primera pila a la cuarta
 
-#### Recomepensa
- 
-
+#### Recompensa
+Para las recompensas, tenemos dos tipos:
+* Recompensa inmediata: esta se atribuye al movimiento de un container, 
+                        se valoriza como -1 
+* Recompensa acumulada: esta corresponde a la suma de las recompensas desde un 
+                        estado hasta el estado final
 
 ## Objetivos
-
-## Plan de trabajo
+El principal objetivo de este trabajo es entrenar un agente mediante un aprendizaje de refuerzo para resolver el  problema del CPMP. Para ello se investiga y modela la estrategia de actor-critico para el aprendizaje.
 
 ## Programa
+El programa principal corresponde al archivo [main.py](main.py) en este se inicializan los datos, se crea en ambiente (escenario inicial) y se comienza el entrenamiento:
+1. Actor escoge una acción
+2. Ambiente realiza el actor generando:
+  - un nuevo estado
+  - la recompensa
+  - verifica si se resolvió el problema (variable _done_)
+3. Critico asocia (_recuerda_) el estado actual más la acción realizada, la recompensa ganada, el nuevo estado generado y si esto significó la resolución del problema.
+4. Se entrena el actor y el critico
+5. Se actualiza el estado actual como el nuevo generado
+6. Se repiten los pasos hasta que el problema este resuelto
 
 ## Layout
 

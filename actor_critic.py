@@ -6,6 +6,9 @@ from keras.layers import Input, Dense
 from keras.layers.merge import Add
 from tensorflow.keras.optimizers import Adam
 
+import tensorflow as tf
+import tensorflow_probability as tfp
+
 
 class ActorCritic:
     def __init__(self, env):
@@ -20,7 +23,7 @@ class ActorCritic:
 
         self.memory = []
 
-        self.actor_state_input, self.actor_model = self.create_actor_model()
+        self.actor_state_input, self.actor_model, self.pi = self.create_actor_model()
         _, self.target_actor_model = self.create_actor_model()
 
         # ===================================================================== #
@@ -36,17 +39,20 @@ class ActorCritic:
     # ========================================================================= #
 
     def create_actor_model(self):
+        n_actions = self.env.get_shape[0] *  (self.env.get_shape[0] - 1)
+
         state_input = Input(shape=self.env.get_shape())
         h1 = Dense(24, activation='relu')(state_input)
         h2 = Dense(48, activation='relu')(h1)
         h3 = Dense(24, activation='relu')(h2)
-        output = Dense(2, activation='relu')(h3) #action
+        output = Dense(n_actions, activation='softmax')(h3) #action
+        # [(0,1), (0,2), (1,0), (1,2) ]
 
         model = Model(state_input, output)
         adam  = Adam(lr=0.001)
         model.compile(loss="mse", optimizer=adam)
 
-        return state_input, model
+        return state_input, model, output
 
     def create_critic_model(self):
         state_input = Input(shape=self.env.get_shape())
@@ -74,28 +80,53 @@ class ActorCritic:
     def remember(self, cur_state, action, reward, new_state, done):
         self.memory.append([cur_state, action, reward, new_state, done])
 
-    def _train_actor(self, samples):
-        for sample in samples:
-            cur_state, action, reward, new_state, _ = sample
-            predicted_action = self.actor_model.predict(cur_state)
+    def _train_actor(self, samples): # policy_train
+        with tf.GradientTape(persistent=True) as tape:
+            for sample in samples:
+                cur_state, action, reward, new_state, done = sample
 
+                cur_state = tf.convert_to_tensor([cur_state], dtype=tf.float32)
+                new_state = tf.convert_to_tensor([new_state], dtype=tf.float32)
+                reward = tf.convert_to_tensor([reward], dtype=tf.float32)
+
+                probs = self.actor_model.predict(cur_state)
+                action_probs = tfp.distributions.Categorical(probs=probs)
+                log_prob = action_probs.log_prob(action)
+
+                state_value = self.critic_model.predict(cur_state)
+                state_value_ = self.critic_model.predict(new_state)
+
+                adv = reward + self.gamma * state_value_* (1-done) - state_value
+                actor_loss = -log_prob*adv
+
+                gradient = tape.gradient(actor_loss, self.actor_model.trainable_variables)
+                self.actor_model.optimizer.apply_gradients(zip(
+                    gradient, self.actor_model.trainable_variables))
 
     def _train_critic(self, samples):
-        for sample in samples:
-            cur_state, action, reward, new_state, done = sample
-            if not done:
-                target_action = self.target_actor_model.predict(new_state)
-                future_reward = self.target_critic_model.predict(
-					[new_state, target_action])[0][0]
-                reward += self.gamma * future_reward
-            self.critic_model.fit([cur_state, action], reward, verbose=0)
+        with tf.GradientTape(persistent=True) as tape:
+            for sample in samples:
+                cur_state, action, reward, new_state, done = sample
+
+                cur_state = tf.convert_to_tensor([cur_state], dtype=tf.float32)
+                new_state = tf.convert_to_tensor([new_state], dtype=tf.float32)
+                reward = tf.convert_to_tensor([reward], dtype=tf.float32)
+
+                state_value = self.critic_model.predict(cur_state)
+                state_value_ = self.critic_model.predict(new_state)
+
+                adv = reward + self.gamma * state_value_* (1-done) - state_value
+                critic_loss = adv**2
+
+                gradient = tape.gradient(critic_loss, self.critic_model.trainable_variables)
+                self.critic_model.optimizer.apply_gradients(zip(
+                    gradient, self.critic_model.trainable_variables))
 
     def train(self):
         batch_size = 32
         if len(self.memory) < batch_size:
             return
 
-        rewards = []
         samples = random.sample(self.memory, batch_size)
         self._train_critic(samples)
         self._train_actor(samples)
@@ -129,6 +160,11 @@ class ActorCritic:
     # ========================================================================= #
 
     def act(self, cur_state, possible_actions):
+        # escoger una acción del softmax y retornar la acción <self.action>
+        # asociada a esa probabilidad
+        # Verificar que la acción sea posible, sino escoger otra (?)
+
+
         # Encargada de elegir la accion segun su politica
         # Fase 1: greedy recorrer secuencia del greedy (retorna lista acciones)
         # Fase 2: bellman
