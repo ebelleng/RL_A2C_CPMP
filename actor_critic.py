@@ -1,5 +1,7 @@
 import numpy as np
 import random
+import copy
+import time
 
 from keras.models import Model
 from keras.layers import Input, Dense
@@ -9,10 +11,14 @@ from tensorflow.keras.optimizers import Adam
 import tensorflow as tf
 import tensorflow_probability as tfp
 
+from utils import prepare
+
 
 class ActorCritic:
-    def __init__(self, env):
+    def __init__(self, env, gamma=0.99):
         self.env = env
+
+        self.gamma = gamma
 
         # ===================================================================== #
         #                               Actor Model                             #
@@ -24,24 +30,24 @@ class ActorCritic:
         self.memory = []
 
         self.actor_state_input, self.actor_model, self.pi = self.create_actor_model()
-        _, self.target_actor_model = self.create_actor_model()
+        _, self.target_actor_model, _ = self.create_actor_model()
 
         # ===================================================================== #
         #                              Critic Model                             #
         # ===================================================================== #
         
-        self.critic_state_input, self.critic_action_input, \
-			self.critic_model = self.create_critic_model()
-        _, _, self.target_critic_model = self.create_critic_model()
+        self.critic_state_input, self.critic_model = self.create_critic_model()
+        _, self.target_critic_model = self.create_critic_model()
    
     # ========================================================================= #
     #                              Model Definitions                            #
     # ========================================================================= #
 
     def create_actor_model(self):
-        n_actions = self.env.get_shape[0] *  (self.env.get_shape[0] - 1)
+        n_actions = self.env.get_shape()[0] *  (self.env.get_shape()[0] - 1)
+        S, H = self.env.get_shape()
 
-        state_input = Input(shape=self.env.get_shape())
+        state_input = Input(shape=S * H)
         h1 = Dense(24, activation='relu')(state_input)
         h2 = Dense(48, activation='relu')(h1)
         h3 = Dense(24, activation='relu')(h2)
@@ -49,87 +55,96 @@ class ActorCritic:
         # [(0,1), (0,2), (1,0), (1,2) ]
 
         model = Model(state_input, output)
-        adam  = Adam(lr=0.001)
-        model.compile(loss="mse", optimizer=adam)
+        adam  = Adam(learning_rate=0.001)
+        model.compile(optimizer=adam)
 
         return state_input, model, output
 
     def create_critic_model(self):
-        state_input = Input(shape=self.env.get_shape())
+        S, H = self.env.get_shape()
+        state_input = Input(shape=S * H)
         state_h1 = Dense(24, activation='relu')(state_input)
         state_h2 = Dense(48)(state_h1)
+        output = Dense(1, activation=None)(state_h2)
 
-        action_input = Input(shape=(2,))
-        action_h1    = Dense(48)(action_input)
+        model = Model(state_input, output)
 
-        merged    = Add()([state_h2, action_h1])
-        merged_h1 = Dense(24, activation='relu')(merged)
-        output = Dense(1, activation='relu')(merged_h1) #dimension output
+        adam  = Adam(learning_rate=0.001)
+        model.compile(optimizer=adam)
 
-        model = Model([state_input, action_input], output)
-
-        adam  = Adam(lr=0.001)
-        model.compile(loss="mse", optimizer=adam)
-
-        return state_input, action_input, model
+        return state_input, model
 
     # ========================================================================= #
     #                               Model Training                              #
     # ========================================================================= #
 
     def remember(self, cur_state, action, reward, new_state, done):
+        if cur_state is None or action is None or reward is None or new_state is None or done is None:
+            print("HAY UN NONEEEEEEEE")
         self.memory.append([cur_state, action, reward, new_state, done])
 
-    def _train_actor(self, samples): # policy_train
-        with tf.GradientTape(persistent=True) as tape:
-            for sample in samples:
-                cur_state, action, reward, new_state, done = sample
+    def _train_actor(self, samples, H): # policy_train
+        for sample in samples:
+            cur_state, action, reward, new_state, done = sample
+
+            with tf.GradientTape(persistent=True) as tape:
+                cur_state = prepare(cur_state, H)
+                new_state = prepare(new_state, H)
 
                 cur_state = tf.convert_to_tensor([cur_state], dtype=tf.float32)
                 new_state = tf.convert_to_tensor([new_state], dtype=tf.float32)
                 reward = tf.convert_to_tensor([reward], dtype=tf.float32)
 
-                probs = self.actor_model.predict(cur_state)
+                tf.debugging.check_numerics(cur_state, 'Checking cur_state train_actor')
+                tf.debugging.check_numerics(new_state, 'Checking new_state train_actor')
+
+                probs = self.actor_model(cur_state)
                 action_probs = tfp.distributions.Categorical(probs=probs)
                 log_prob = action_probs.log_prob(action)
 
-                state_value = self.critic_model.predict(cur_state)
-                state_value_ = self.critic_model.predict(new_state)
+                state_value = self.critic_model(cur_state)
+                state_value_ = self.critic_model(new_state)
 
                 adv = reward + self.gamma * state_value_* (1-done) - state_value
                 actor_loss = -log_prob*adv
 
-                gradient = tape.gradient(actor_loss, self.actor_model.trainable_variables)
-                self.actor_model.optimizer.apply_gradients(zip(
-                    gradient, self.actor_model.trainable_variables))
+            gradient = tape.gradient(actor_loss, self.actor_model.trainable_variables)
+            self.actor_model.optimizer.apply_gradients(zip(
+                gradient, self.actor_model.trainable_variables))
 
-    def _train_critic(self, samples):
-        with tf.GradientTape(persistent=True) as tape:
-            for sample in samples:
-                cur_state, action, reward, new_state, done = sample
+    def _train_critic(self, samples, H):
+        for sample in samples:
+            cur_state, _, reward, new_state, done = sample
+
+            with tf.GradientTape(persistent=True) as tape:
+                cur_state = prepare(cur_state, H)
+                new_state = prepare(new_state, H)
 
                 cur_state = tf.convert_to_tensor([cur_state], dtype=tf.float32)
                 new_state = tf.convert_to_tensor([new_state], dtype=tf.float32)
                 reward = tf.convert_to_tensor([reward], dtype=tf.float32)
 
-                state_value = self.critic_model.predict(cur_state)
-                state_value_ = self.critic_model.predict(new_state)
+                tf.debugging.check_numerics(cur_state, 'Checking cur_state train_critic')
+                tf.debugging.check_numerics(new_state, 'Checking new_state train_critic')
+
+                state_value = self.critic_model(cur_state)
+                state_value_ = self.critic_model(new_state)
 
                 adv = reward + self.gamma * state_value_* (1-done) - state_value
                 critic_loss = adv**2
 
-                gradient = tape.gradient(critic_loss, self.critic_model.trainable_variables)
-                self.critic_model.optimizer.apply_gradients(zip(
-                    gradient, self.critic_model.trainable_variables))
+            gradient = tape.gradient(critic_loss, self.critic_model.trainable_variables)
+            self.critic_model.optimizer.apply_gradients(zip(
+                gradient, self.critic_model.trainable_variables))
 
-    def train(self):
+    def train(self, H):
         batch_size = 32
         if len(self.memory) < batch_size:
             return
 
         samples = random.sample(self.memory, batch_size)
-        self._train_critic(samples)
-        self._train_actor(samples)
+        self._train_critic(samples, H)
+        self._train_actor(samples, H)
 
     # ========================================================================= #
     #                         Target Model Updating                             #
@@ -172,9 +187,28 @@ class ActorCritic:
         # actor evlua accciones segun recom acum.
         # 1. Predecir origen (input: cur_state)
         # 2. Predecir detino (input: origen, cur_state)
-        origen = 0
-        destino = 0
-        return (origen, destino)
+        cur_state_copy = copy.deepcopy(cur_state)
+        cur_state_copy = prepare(cur_state_copy, self.env.H)
+        cur_state_copy = tf.convert_to_tensor([cur_state_copy], dtype=tf.float32)
+
+
+        tf.print(cur_state_copy)
+        tf.debugging.check_numerics(cur_state_copy, 'Checking cur_state_copy before probs')
+
+        probs = self.actor_model(cur_state_copy)
+
+        tf.debugging.check_numerics(probs, 'Checking probs')
+        
+        action_probabilities = tfp.distributions.Categorical(probs=probs)
+        action = action_probabilities.sample()
+
+        try: 
+            x = tf.debugging.check_numerics(probs, 'Checking action try')
+            return possible_actions[action.numpy()[0]]
+        except:
+            #print(action)
+            x = tf.debugging.check_numerics(probs, 'Checking action except')
+            return possible_actions[0]
     
     # ========================================================================= #
     #                              Model Predictions                            #

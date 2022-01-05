@@ -1,11 +1,12 @@
 import copy
+import time
 import actor_critic as ac
 from enviroment import Enviroment
 from greedy import greedy_solve
-import numpy as np
 
-MaxIter = 5000
-GreedyIter = 2500
+MaxIter = 2000
+GreedyIter = 5000
+Enviroments = 100
 
 def main():
     S, H = (5,7)
@@ -13,7 +14,7 @@ def main():
     actor_critic = ac.ActorCritic(env)
 
     # Loop de entrenamiento mediante Greedy
-    for _ in range(1):
+    for _ in range(GreedyIter):
         layout = env.create_env(N=20)
         layout_copy = copy.deepcopy(layout)
 
@@ -21,9 +22,9 @@ def main():
 
         initial_state = layout_copy.stacks
         solved_state = layout.stacks
-        env.show_state(initial_state)
-        print(f"actions: {actions}")
-        env.show_state(solved_state)
+        # env.show_state(initial_state)
+        # print(f"actions: {actions}")
+        # env.show_state(solved_state)
 
         env.layout = layout_copy # Se vuelve al estado original del layout antes de ser resuelto
 
@@ -31,39 +32,44 @@ def main():
             cur_state = copy.deepcopy(env.layout.stacks)
             new_state, reward, done = env.step(action)
 
-            print(f"cur_state:", cur_state)
-            print("action:", action)
-            print(f"new_state:", new_state)
-
             actor_critic.remember(cur_state, action, reward, new_state, done)
-            #actor_critic.train()
+    
+    actor_critic.train(H)
+    actor_critic.memory.clear()
 
-        actor_critic.print_memory()
-        actor_critic.save_memory()
-        actor_critic.load_memory()
-        return
-        # savetxt('data.csv', data, delimiter=',')
-        #np.savetxt('memory.csv', map(np.array, actor_critic.get_memory() ), delimiter=',')
+    # actor_critic.print_memory()
+    # actor_critic.save_memory()
+    # actor_critic.load_memory()
 
-    layout = env.create_env(N=20)
+    for _ in range(Enviroments):
+        layout = env.create_env(N=20)
+        cur_state = layout.stacks
+        total_reward = 0
 
-    for epoch in range(MaxIter):
-        possible_actions = env.get_actions(cur_state)
-        action = actor_critic.act(cur_state, possible_actions)
-        bad_pos = env.get_bad_positions(cur_state)
-        print(f'Iter: {epoch}')
-        print(bad_pos)
-        env.show_state(cur_state)
+        for epoch in range(MaxIter):
+            actions, invalid_actions = env.get_actions(cur_state)
+            
+            action = actor_critic.act(cur_state, actions)
 
-        new_state, reward, done = env.step(action)  
+            if action in invalid_actions:
+                new_state, reward, done = env.step(None)
+            else:
+                new_state, reward, done = env.step(action) 
+            
+            total_reward += reward
+            actor_critic.remember(cur_state, action, reward, new_state, done)
 
-        actor_critic.remember(cur_state, action, reward, new_state, done)
+            if done:
+                break 
 
-        actor_critic.train()
+            cur_state = new_state
 
-        cur_state = new_state
+        print(f"Total reward {total_reward}")
+        
+        actor_critic.train(H)
 
-    actor_critic.metrics()
+
+    #actor_critic.metrics()
 
 if __name__ == "__main__":
 	main()

@@ -12,15 +12,18 @@ class Enviroment():
             stacks.append([])
         
         for j in range(N):
-            s=random.randint(0,self.S-1);
-            while len(stacks[s])==self.H: s=s=random.randint(0,self.S-1);
-            stacks[s].append(random.randint(1,N));
+            s=random.randint(0,self.S-1)
+            while len(stacks[s])==self.H: s=s=random.randint(0,self.S-1)
+            stacks[s].append(random.randint(1,N))
         
         #self.layout = stacks
         self.layout = Layout(stacks, self.H)
         return self.layout
 
     def step(self, action):
+        if action is None:
+            return (self.layout.stacks, -3, 0)
+
         stack_source, stack_destination = action
         self.layout.move(stack_source, stack_destination)
 
@@ -47,8 +50,17 @@ class Enviroment():
         return L
 
     def get_actions(self, cur_state):
-
-        return
+        actions = []
+        invalid_actions = []
+        for i in range(self.S):
+            for j in range(self.S):
+                if i != j:
+                    if len(cur_state[i]) > 0 and len(cur_state[j]) < self.H:
+                        actions.append( (i, j) )
+                    else:
+                        actions.append( (i, j) )
+                        invalid_actions.append( (i, j) )
+        return actions, invalid_actions
 
     def get_shape(self):
         return (self.S, self.H)
