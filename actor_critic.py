@@ -113,7 +113,9 @@ class ActorCritic:
                 gradient, self.actor_model.trainable_variables))
 
     def _train_critic(self, samples, H):
+        cont = 0
         for sample in samples:
+            print(f"Iter {cont}")
             cur_state, _, reward, new_state, done = sample
 
             with tf.GradientTape(persistent=True) as tape:
@@ -136,11 +138,15 @@ class ActorCritic:
             gradient = tape.gradient(critic_loss, self.critic_model.trainable_variables)
             self.critic_model.optimizer.apply_gradients(zip(
                 gradient, self.critic_model.trainable_variables))
+            cont += 1
 
-    def train(self, H):
-        batch_size = 32
-        if len(self.memory) < batch_size:
-            return
+    def train(self, H, all = False):
+        if not all:
+            batch_size = 32
+            if len(self.memory) < batch_size:
+                return
+        else:
+            batch_size = len(self.memory)
 
         samples = random.sample(self.memory, batch_size)
         self._train_critic(samples, H)
@@ -195,6 +201,7 @@ class ActorCritic:
         tf.print(cur_state_copy)
         tf.debugging.check_numerics(cur_state_copy, 'Checking cur_state_copy before probs')
 
+        print(cur_state_copy.numpy())
         probs = self.actor_model(cur_state_copy)
 
         tf.debugging.check_numerics(probs, 'Checking probs')
