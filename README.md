@@ -14,7 +14,7 @@ Para nuestro problema en particular, está ideado para el "Container Pre-marshal
 
 ![Figura 1: Escenario con 7 containers](img/fig1.png)
 
-<p align=center> **Figura 1**: Escenario con 7 containers </p>
+<p align=center> Figura 1: Escenario con 7 containers </p>
 
 ### Aprendizaje reforzado
 

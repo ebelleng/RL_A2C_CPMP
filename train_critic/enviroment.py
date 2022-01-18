@@ -77,6 +77,6 @@ class Enviroment():
 
         for i in range(self.H-1, -1, -1):
             for j in range(len(lay)):
-                print(lay[j][i], end=' ')
+                print(f'{lay[j][i]:2}', end=' ')
             print()
         print()

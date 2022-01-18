@@ -1,7 +1,6 @@
 import numpy as np
 import random
 import copy
-import time
 
 from keras.models import Model
 from keras.layers import Input, Dense
@@ -12,13 +11,12 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 
 from utils import prepare
-
+from permutational_layer import *
+from data import *
 
 class ActorCritic:
-    def __init__(self, env, gamma=0.99):
+    def __init__(self, env):
         self.env = env
-
-        self.gamma = gamma
 
         # ===================================================================== #
         #                               Actor Model                             #
@@ -36,9 +34,9 @@ class ActorCritic:
         #                              Critic Model                             #
         # ===================================================================== #
         
-        self.critic_state_input, self.critic_model = self.create_critic_model()
-        _, self.target_critic_model = self.create_critic_model()
-   
+        self.critic_model = self.create_critic_model()
+        self.train_critic_model()
+        
     # ========================================================================= #
     #                              Model Definitions                            #
     # ========================================================================= #
@@ -61,18 +59,33 @@ class ActorCritic:
         return state_input, model, output
 
     def create_critic_model(self):
-        S, H = self.env.get_shape()
-        state_input = Input(shape=S * H)
-        state_h1 = Dense(24, activation='relu')(state_input)
-        state_h2 = Dense(48)(state_h1)
-        output = Dense(1, activation=None)(state_h2)
+        rows, columns = self.env.get_shape()
 
-        model = Model(state_input, output)
+        perm_layer1 = PermutationalLayer(PermutationalEncoder(PairwiseModel((rows+2,), repeat_layers(Dense, [32, 32], activation='relu')), columns), name='permutational_layer1')
+        perm_layer2 = PermutationalLayer(PermutationalEncoder(PairwiseModel((32,), repeat_layers(Dense, [32, 32], activation='relu')), columns), name='permutational_layer2')
+        perm_layer3 = PermutationalLayer(PermutationalEncoder(PairwiseModel((32,), repeat_layers(Dense, [32, 32], activation='relu')), columns), pooling=maximum, name='permutational_layer3')
+        
+        dense1 = Dense(128, activation="relu", name="layer1")
+        dense2 = Dense(64, activation="relu", name="layer2")
+        dense3 = Dense(1, activation="linear", name="layer3")
+
+        inputs = []
+        for i in range(columns):
+            inputs.append(Input((rows+2,), name='stack_'+str(i)))
+
+        outputs = perm_layer1(inputs)
+        outputs = perm_layer2(outputs)
+        outputs = perm_layer3(outputs)
+        outputs = dense1(outputs)
+        outputs = dense2(outputs)
+        output = dense3(outputs)
+
+        model = Model(inputs, output)
 
         adam  = Adam(learning_rate=0.001)
-        model.compile(optimizer=adam)
+        model.compile(loss='mse', optimizer=adam, metrics=['mse'])
 
-        return state_input, model
+        return model
 
     # ========================================================================= #
     #                               Model Training                              #
@@ -114,9 +127,11 @@ class ActorCritic:
 
     def _train_critic(self, samples, H):
         cont = 0
-        for sample in samples:
-            print(f"Iter {cont}")
+        archivo = open("train_critic.txt", 'w')
+        for i, sample in enumerate(samples):
             cur_state, _, reward, new_state, done = sample
+            print(f"Iter {cont} - {done}", end=' ')
+            archivo.write(f"Iter {cont} - {done}")
 
             with tf.GradientTape(persistent=True) as tape:
                 cur_state = prepare(cur_state, H)
@@ -131,14 +146,19 @@ class ActorCritic:
 
                 state_value = self.critic_model(cur_state)
                 state_value_ = self.critic_model(new_state)
+                
 
                 adv = reward + self.gamma * state_value_* (1-done) - state_value
                 critic_loss = adv**2
+                print(f'{state_value}\t{state_value_}\t{adv}\t{critic_loss}')
+                archivo.write(f'{state_value}\t{state_value_}\t{adv}\t{critic_loss}')
 
+        
             gradient = tape.gradient(critic_loss, self.critic_model.trainable_variables)
             self.critic_model.optimizer.apply_gradients(zip(
                 gradient, self.critic_model.trainable_variables))
             cont += 1
+        archivo.close()
 
     def train(self, H, all = False):
         if not all:
@@ -149,33 +169,19 @@ class ActorCritic:
             batch_size = len(self.memory)
 
         samples = random.sample(self.memory, batch_size)
+        #samples = self.get_samples() 
         self._train_critic(samples, H)
         self._train_actor(samples, H)
 
-    # ========================================================================= #
-    #                         Target Model Updating                             #
-    # ========================================================================= #
-
-    def _update_actor_target(self):
-        actor_model_weights = self.actor_model.get_weights()
-        actor_target_weights = self.target_critic_model.get_weights()
-
-        for i in range(len(actor_target_weights)):
-            actor_target_weights[i] = actor_model_weights[i]
-        self.target_critic_model.set_weights(actor_target_weights)
-
-    def _update_critic_target(self):
-        critic_model_weights = self.critic_model.get_weights()
-        critic_target_weights = self.critic_target_model.get_weights()
-
-        for i in range(len(critic_target_weights)):
-            critic_target_weights[i] = critic_model_weights[i]
-        self.critic_target_model.set_weights(critic_target_weights)
-
-    def update_target(self):
-        self._update_actor_target()
-        self._update_critic_target()
-
+    def train_critic_model(self):
+        self.data_train = generate_data_greedy(51200)
+        self.S, self.H = self.env.get_shape()
+        for i in range(200):
+            X,y = self.data_train
+            Xtrain_input_array = InputEncoder(X, self.S, self.H)
+            history=self.critic_model.fit(Xtrain_input_array, y, epochs=10, batch_size=1024, verbose=False)
+            print(history.history['loss'][0])
+        
     # ========================================================================= #
     #                              Model Predictions                            #
     # ========================================================================= #
@@ -281,3 +287,20 @@ class ActorCritic:
             done      = list_done[i]
 
             self.remember(cur_state, action, reward, new_state, done)
+
+    def get_missing_actions(i, samples):
+        return
+
+    def get_samples(self):
+        mini_sample = []
+        count = 0
+        for sample in self.memory:
+            cur_state, action, reward, new_state, done = sample
+            mini_sample.append(sample)
+            if done == 1:
+                count += 1
+
+            if done == 1 and count == 5:
+                print("Cantidad de weas : ", len(mini_sample), count)
+                return mini_sample
+
