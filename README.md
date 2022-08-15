@@ -1,3 +1,3 @@
-# Agente RL para CPMP with A2C
+# Agente RL para CPMP con A2C
 
-Trabajo de investigación y desarrollo para Practica I de Ingeniería Civil Informática.
+Trabajo de investigación para optar al titulo de Ingeniero Civil en Informática.
