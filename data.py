@@ -58,7 +58,7 @@ def generate_random_layout(S, H, N):
 
     return Layout(stacks, H)
 
-def generate_data_greedy(n=10000, model_type="value", columns=7, rows=7, Nmin=20, Nmax=35):
+def generate_data_greedy(n=10000, model_type="actor", columns=7, rows=7, Nmin=20, Nmax=35):
     states = []
     moves = []
     costs = []
@@ -92,17 +92,30 @@ def generate_data_greedy(n=10000, model_type="value", columns=7, rows=7, Nmin=20
         # cantidad de elementos mal ubicados en layout actual (lower bound)
         lb = compute_unsorted_elements(states[i])
         st = generate_ann_state_lm(states[i], rows)
-        index_move = index_list.index( tuple(moves[i]) ) #[(0,1), (0,2)...]
-        print(f'Move: {moves[i]} , indec: {index_move}')
-        df_numpy.append(np.concatenate((st, np.array([index_move]))))
+
+        if model_type=='actor':
+            index_move = index_list.index( tuple(moves[i]) ) #[(0,1), (0,2)...]
+            #print(f'Move: {moves[i]} , index: {index_move}')
+            df_numpy.append(np.concatenate((st, np.array([index_move]))))
+        else:
+            df_numpy.append(np.concatenate((st,np.array(moves[i]+[costs[i]-lb]))))
     df_numpy = np.array(df_numpy)
     
-    X = df_numpy[:, :(rows)*columns]
-    y = df_numpy[:, -1]
+    
+    if model_type=='actor':
+        X = df_numpy[:, :(rows)*columns]
+        y = df_numpy[:, -1]
 
-    # reshape para X
-    X = np.expand_dims(X, axis=2)
-    X.shape = (X.shape[0], columns, rows)
+        # reshape para X
+        X = np.expand_dims(X, axis=2)
+        X.shape = (X.shape[0], columns, rows)
+    else:
+        X = df_numpy[:,:(rows+2)*columns]
+        y = df_numpy[:,-3] # costs[i]-lb
+        
+        # reshape para X
+        X = np.expand_dims(X, axis=2)
+        X.shape = (X.shape[0], columns, rows+2)
 
     return X, y
 

@@ -87,6 +87,7 @@ def generate_data_greedy(n=10000, model_type="value", columns=7, rows=7, Nmin=20
   for i in range(len(states)):
     lb = compute_unsorted_elements(states[i]) #cantidad de elementos mal ubicados en layout actual (lower bound)
     st = generate_ann_state_lm(states[i],rows,moves[i])
+    print(st.shape)
     df_numpy.append(np.concatenate((st,np.array([costs[i]-lb]+moves[i]))))
   df_numpy = np.array(df_numpy)
 
@@ -95,6 +96,13 @@ def generate_data_greedy(n=10000, model_type="value", columns=7, rows=7, Nmin=20
   
   # reshape para X
   X = np.expand_dims(X, axis=2)
+  print(X.shape)
   X.shape = (X.shape[0], columns, rows+2)
-
+  print(X.shape)
   return X,y
+
+def main():
+  X,y = generate_data_greedy(1)
+  print(X)
+
+main()

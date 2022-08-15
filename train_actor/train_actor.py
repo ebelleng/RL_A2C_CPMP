@@ -8,38 +8,29 @@ from data import *
 def create_actor_model(rows=7, columns=7):
     n_actions = (rows-1) * columns
 
-    model = Sequential()
-
-    model.add(Dense(64, activation='relu'))
-    model.add(Dense(n_actions, activation='softmax'))
+    model = tf.keras.models.Sequential([tf.keras.layers.Flatten(),
+                tf.keras.layers.Dense(128, activation = tf.nn.relu),
+                tf.keras.layers.Dense(n_actions, activation = tf.nn.softmax)])
     
-    model.compile(loss='categorical_crossentropy',
-                  optimizer='adam', metrics=['accuracy'])
+    model.compile(optimizer = tf.optimizers.Adam(),
+              loss = 'sparse_categorical_crossentropy',
+              metrics =['accuracy'])
+
     return model
 
 def train_actor_model(rows, columns, actor_file):
     actor_model = create_actor_model(rows, columns)
     
     X,y = generate_data_greedy(1)
-    print(y)
-    Xtrain_input_array = InputEncoder(X, rows, columns)
-    #print(np.array(Xtrain_input_array).shape)
-
-    X_train_tensor = tf.convert_to_tensor(Xtrain_input_array)
-    print(X_train_tensor)
-
-    actor_model.fit(X_train_tensor, y, epochs = 5)
-    #actor_model.fit(X, y, epochs = 5)
+    
+    actor_model.fit(X, y, epochs = 5)
     
     return actor_model
 
 def test_actor_model(actor_model, rows=7, columns=7):
     X,y = generate_data_greedy(200)
-    X_train = InputEncoder(X, rows, columns)
-
-    X_train_tensor = tf.convert_to_tensor(X_train)
-
-    actor_model.evaluate(X_train_tensor, y)
+   
+    actor_model.evaluate(X, y)
     
 def load_actor_model(actor_file):
     return
