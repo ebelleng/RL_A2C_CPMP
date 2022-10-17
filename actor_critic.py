@@ -1,11 +1,13 @@
-from cProfile import label
 from keras.models import Sequential
 from keras.layers import Dense, Flatten
 from tensorflow.keras.optimizers import Adam
 import tensorflow as tf
 import matplotlib.pyplot as plt
+from sklearn import metrics
+from sklearn.metrics import classification_report, confusion_matrix
 import copy
 import numpy as np
+import pandas as pd
 from data import generate_ann_state_lm
 
 
@@ -24,8 +26,8 @@ class ActorCritic:
         self.memory = []
         self.actor_file = f"model/actor_file_{self.env.get_shape()[0]}x{self.env.get_shape()[1]}_N_20.h5"
         self.actor_model = self.create_actor_model()
-        self.train_policy_iterations = 30
-        self.target_kl = 10
+        self.train_policy_iterations = 3
+        self.target_kl = 5
         self.actor_history_loss = []
 
         # ===================================================================== #
@@ -34,7 +36,7 @@ class ActorCritic:
 
         self.critic_file = f'model/critic_file_{self.env.get_shape()[0]}x{self.env.get_shape()[1]}_N_20.h5'
         self.critic_model = self.create_critic_model()
-        self.train_value_iterations = 30
+        self.train_value_iterations = 1
         self.critic_history_loss = []
 
     # ========================================================================= #
@@ -55,7 +57,7 @@ class ActorCritic:
                 Dense(n_actions, activation='softmax')
             ])
 
-            adam = Adam(learning_rate=0.001)
+            adam = Adam(learning_rate=0.0001)
             model.compile(optimizer=adam,
                         loss='sparse_categorical_crossentropy',
                         metrics=['accuracy'])
@@ -205,11 +207,44 @@ class ActorCritic:
         # print('#Termino entrenamiento critico')
 
         return 
+    
+    def fit(self,X,y,verbose=False,save_files=False):
+        # states,advantages = X = df['states','advantages']
+        # actions,rewards   = y = df['actions','rewards']
+        # print(X.head())
+        # print(y.head())
+
+        # Se entrena actor
+        for i in range(X.shape[0]):
+            print(f'    {i}     ')
+            states     = X['states'].iloc[i]
+            advantages = X['advantages'].iloc[i]
+            actions    = y['actions'].iloc[i]
+            rewards    = y['rewards'].iloc[i]
+
+            for _ in range(self.train_policy_iterations):
+                ac_loss, kl = self.train_actor(states, actions, advantages)
+                if verbose and _ in [0, self.train_policy_iterations//2 ,self.train_policy_iterations-1]: 
+                    print(_, ac_loss, sep='\t')
+                if kl > 1.5 * self.target_kl:
+                    # Early Stopping
+                    break
+            self.actor_history_loss.append(ac_loss)
+                
+            # Se entrena el critico
+            for _ in range(self.train_value_iterations):
+                cr_loss = self.train_critic(states, rewards)
+                if verbose and _ in [0, self.train_value_iterations//2 ,self.train_value_iterations-1]: 
+                    print(_, cr_loss, sep='\t')
+            self.critic_history_loss.append(cr_loss)
+
+        if save_files: self.save_graph()
     # ========================================================================= #
     #                              Model Predictions                            #
     # ========================================================================= #
 
-    def actor_predict(self,state, rows=7, columns=7):
+    def actor_predict(self,state):
+        rows, columns = self.env.get_shape()
         st = [generate_ann_state_lm(state, rows)]
         st = np.array(st)[:, :(rows)*columns]
         st = np.expand_dims(np.array(st), axis=2)
@@ -229,7 +264,8 @@ class ActorCritic:
             actions.append(list_actions[index])
         return actions
 
-    def critic_predict(self,state, rows=7, columns=7):
+    def critic_predict(self,state):
+        rows, columns = self.env.get_shape()
         st = [generate_ann_state_lm(state, rows)]
         st = np.array(st)[:, :(rows+2)*columns]
         st = np.expand_dims(np.array(st), axis=2)
@@ -238,10 +274,81 @@ class ActorCritic:
         steps = self.critic_model(st)
         
         return np.array([int(s) for s in steps])
+    
+    def predict(self,X):
+        data = {
+            'actions' : [],
+            'rewards' : []
+        }
+        for i in range(X.shape[0]):
+            states     = X['states'].iloc[i]
+            data['actions'].append( [ self.get_action(self.actor_predict(st))[0] for st in states] )
+            data['rewards'].append( [ self.critic_predict(st)[0] for st in states] )
+    
+        return pd.DataFrame(data, columns=['actions','rewards'])
+    
+    # ========================================================================= #
+    #                                 Metrics                                   #
+    # ========================================================================= #
+    def actor_metrics(self,y_test,y_pred):
+        print(y_pred, y_test)
+        print(y_pred.to_numpy().shape,y_test.to_numpy().shape)
+
+        # print("Accuracy Actor:",metrics.accuracy_score(y_test, y_pred))
+        # print(confusion_matrix(y_test, y_pred))
+        # print(classification_report(y_test, y_pred))
+    
+    def critic_metrics(self,y_test,y_pred):
+        print(y_pred.to_numpy(),y_test.to_numpy())
+        print(y_pred.to_numpy().shape,y_test.to_numpy().shape)
+        
+        print("Accuracy Critic:",metrics.accuracy_score(y_pred.to_numpy(),y_test.to_numpy()))
+        print(confusion_matrix(y_pred.to_numpy(),y_test.to_numpy()))
+        print(classification_report(y_pred.to_numpy(),y_test.to_numpy()))
+    
+
     # ========================================================================= #
     #                                   Solve                                   #
     # ========================================================================= #
-    def solve(self, Layout, solver,train=True,n_pasos=1):
+    def solve(self, Layout,solver,n_pasos=1):
+        layout = Layout
+        done = False;except_flag = False;count_actions=0;reward_acum=0
+        current_state = layout.stacks
+
+        states  = [current_state]
+        rewards = []
+        actions = []
+        advantages = []
+    
+        while not done and count_actions<n_pasos:
+            action = self.get_action(self.actor_predict(current_state))[0]           
+            
+            new_state, _, done = self.env.step(layout, action)
+            actions.append(action)
+
+            # Calculamos malas posiciones estado actual y siguiente
+            BP_i  = len( self.env.get_bad_positions(current_state))
+            BP_i_ = len( self.env.get_bad_positions(new_state))
+
+            # Calculamos recompensa inmediata
+            if done: reward = -len(solver(copy.deepcopy(layout))) - 1
+            else   : reward = (BP_i - BP_i_) - 1
+            
+            #print(f'# {done}-> Rwds_acum: {reward_acum} - Rwds: {reward}')
+            reward_acum += reward
+
+            Vs  = self.critic_predict(current_state)
+            Vs_ = self.critic_predict(new_state)    # Valor estado siguiente
+            
+            current_state  = new_state
+            count_actions += 1
+            states.append(copy.deepcopy(current_state))
+            rewards.insert(0,reward_acum)
+            advantages.append(reward + self.gamma * Vs_ - Vs)
+
+        return states,actions,advantages,rewards,done
+
+    def _solve(self, Layout, solver,train=True,n_pasos=1):
         actions = []
         layout = copy.deepcopy(Layout)
         done = False;except_flag = False;count_actions=0;reward_acum=0
@@ -254,7 +361,7 @@ class ActorCritic:
     
         while not done:
             if count_actions<n_pasos:
-                action = self.get_action(self.actor_predict(current_state))[0]
+                action = self.get_action(self.actor_predict(current_state,layout.S,layout.H))[0]
             else: break
             
             
@@ -275,8 +382,8 @@ class ActorCritic:
             #print(f'# {done}-> Rwds_acum: {reward_acum} - Rwds: {reward}')
             reward_acum += reward
 
-            Vs = self.critic_predict(current_state)
-            Vs_ = self.critic_predict(new_state)    # Valor estado siguiente
+            Vs = self.critic_predict(current_state,layout.S,layout.H)
+            Vs_ = self.critic_predict(new_state,layout.S,layout.H)    # Valor estado siguiente
             
             current_state = new_state
             count_actions += 1
@@ -306,8 +413,8 @@ class ActorCritic:
             #print(f'# {done}-> Rwds_acum: {reward_acum} - Rwds: {reward}')
             reward_acum += reward
 
-            Vs = self.critic_predict(current_state)
-            Vs_ = self.critic_predict(new_state)    # Valor estado siguiente
+            Vs = self.critic_predict(current_state,layout.S,layout.H)
+            Vs_ = self.critic_predict(new_state,layout.S,layout.H)    # Valor estado siguiente
             
             current_state = new_state
             count_actions += 1
@@ -324,43 +431,50 @@ class ActorCritic:
     # ========================================================================= #
     #                                   Debug                                   #
     # ========================================================================= #
-    def graph(self):
-        # # Grafica Critic
-        # critic_graph = plt.figure(1,figsize=(20,15))
-        # critic_graph.suptitle('Critic Loss')
-        # #critic_graph.title('Critic Loss', size=16)
-        # # critic_graph.rcParams["figure.figsize"] = (20,15)
+    def save_graph(self):
+        rows,columns = self.env.get_shape()
+        
+        # Grafica Actor
+        plt.figure(0)
+        plt.title(f"Actor Model - {rows}x{columns}", size=16)
+        plt.rcParams["figure.figsize"] = (20,15)
 
-        # X_plot = range(len(self.critic_history_loss))
-        # y_plot = self.critic_history_loss
+        plt.xlabel("Iter", size = 12,)
+        plt.ylabel("Loss", size = 12)
 
-        # critic_graph.xlabel('iter', size = 12,)
-        # critic_graph.ylabel('Loss', size = 12) 
+        X_plot = range(len(self.actor_history_loss))
+        y_plot = self.actor_history_loss
+        plt.plot(X_plot, y_plot, label='Actor loss')
 
-        # critic_graph.plot(X_plot, y_plot)
-        # #plt.legend(loc='lower right')
-        # critic_graph.savefig(f'img\\critic_loss.png')
+        # plt.vlines(x = [n for n in range(n_iter,N*n_iter,n_iter)],ymin = 0, ymax = max(y_plot), 
+        #     colors = 'grey', 
+        #     linestyles='--')
 
-        # # Grafico Actor 
-        # plt.figure(2)
-        # plt.title('Actor Loss', size=16)
-        # plt.rcParams["figure.figsize"] = (20,15)
+        plt.legend(loc='lower right')
+        plt.savefig(f'img\\actor_loss_{rows}x{columns}.png')
+        plt.close()
+        
+        # Grafica Critic
+        plt.figure(1)
+        plt.title(f"Critic Model - {rows}x{columns}", size=16)
+        plt.rcParams["figure.figsize"] = (20,15)
 
-        # X_plot = range(len(self.actor_history_loss))
-        # y_plot = self.actor_history_loss
+        plt.xlabel("Iter", size = 12,)
+        plt.ylabel("Loss", size = 12)
 
-        # plt.xlabel('iter', size = 12,)
-        # plt.ylabel('Loss', size = 12) 
+        X_plot = range(len(self.critic_history_loss))
+        y_plot = self.critic_history_loss
+        plt.plot(X_plot, y_plot, label='critic loss')
 
-        # plt.plot(X_plot, y_plot)
-        # #plt.legend(loc='lower right')
-        # plt.savefig(f'img\\actor_loss.png')
+        plt.legend(loc='lower right')
+        plt.savefig(f'img\\critic_loss_{rows}x{columns}.png')
+        plt.close()
 
-        np.savetxt('critic_history_loss.csv',
+        np.savetxt('data\\critic_history_loss.csv',
             X=self.critic_history_loss,
             delimiter=','
             )
-        np.savetxt('actor_history_loss.csv',
+        np.savetxt('data\\actor_history_loss.csv',
             X=self.actor_history_loss,
             delimiter=','
             )

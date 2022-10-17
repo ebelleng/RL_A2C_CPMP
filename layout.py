@@ -21,6 +21,7 @@ class Layout:
         self.steps = 0
         self.current_step = 0
         self.moves = []
+        self.S = len(stacks)
         self.H = H
         self.full_stacks = 0
         self.last_sd = None
@@ -43,7 +44,7 @@ class Layout:
         if len(self.stacks[i]) == self.H: self.full_stacks -= 1
         if len(self.stacks[j]) == self.H-1: self.full_stacks += 1
         if len(self.stacks[i]) == 0: return self.stacks
-        if len(self.stacks[j]) == 7: return self.stacks
+        if len(self.stacks[j]) == self.H: return self.stacks
   
         c = self.stacks[i][index]
         if self.is_sorted_stack(i):

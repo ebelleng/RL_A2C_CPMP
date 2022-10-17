@@ -37,7 +37,7 @@ class Enviroment():
 
     def is_valid_layout(self,layout):
         for stack in layout.stacks:
-            if len(stack) > 7:
+            if len(stack) > self.H:
                 return False
         return True
     def is_sorted_stacks(self,layout): 

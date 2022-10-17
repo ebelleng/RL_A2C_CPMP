@@ -1,9 +1,11 @@
-from pyparsing import col
+from sklearn.model_selection import train_test_split
+from enviroment import Enviroment
 from transform_state import *
 import copy
 from greedy import greedy_solve
 import numpy as np
 import random
+import pandas as pd
 from layout import *
 
 
@@ -28,20 +30,20 @@ def InputEncoder(X: [[[]]], rows: int, columns: int) -> []:
     return X_input_array
 
 def generate_ann_state_lm(yard, H, last_move=None):
-    n_rows = len(yard)
-    yard = copy.deepcopy(yard)
-    max_item = max(set().union(*yard))
-    #max_item = max([max(stack) for stack in yard])
+    n_rows      = len(yard)
+    yard        = copy.deepcopy(yard)
+    max_item    = max(set().union(*yard))
+    #max_item   = max([max(stack) for stack in yard])
     stackValues = getStackValues(yard)  # well-placed
-    stacksLen = getStackLen(yard)
-    topStacks = getTopStacks(yard, max_item)
-    yard = compactState(yard)
-    yard = elevateState(yard, H, max_item)
-    yard = flattenState(yard)
-    yard = normalize(yard, max_item)
-    state = yard
+    stacksLen   = getStackLen(yard)
+    topStacks   = getTopStacks(yard, max_item)
+    yard        = compactState(yard)
+    yard        = elevateState(yard, H, max_item)
+    yard        = flattenState(yard)
+    yard        = normalize(yard, max_item)
+    state       = yard
     state.shape = (n_rows, H)
-    state = np.lib.pad(state, ((0, 0), (0, 2)),
+    state       = np.lib.pad(state, ((0, 0), (0, 2)),
                        'constant', constant_values=(0))
     if last_move is not None:
         state[last_move[0]][H] = 1.0
@@ -50,7 +52,6 @@ def generate_ann_state_lm(yard, H, last_move=None):
     state.shape = ((n_rows+2)*H)
 
     return state
-
 
 def generate_random_layout(S, H, N):
     stacks = []
@@ -64,6 +65,71 @@ def generate_random_layout(S, H, N):
         stacks[s].append(random.randint(1, N))
 
     return Layout(stacks, H)
+
+def generate_data_a2c(n=1000,actor_critic=None,rows=7,columns=7,a2c_step=1):
+    gamma=1
+    env = Enviroment(rows,columns)
+    data = {
+        'states'     : [],
+        'advantages' : [],
+        'rewards'    : [],
+        'actions'    : []
+        }
+
+    for i in range(n):
+        layout = env.create_env((rows*columns) // 2) ; current_state = layout.stacks
+        states_i,actions_i,advantages_i,rewards_i,done = actor_critic.solve(layout,greedy_solve,n_pasos=a2c_step)
+        if done: 
+            states     += states_i
+            actions    += actions_i
+            advantages += advantages_i
+            rewards    += rewards_i
+            continue
+
+        greedy_actions = greedy_solve(copy.deepcopy(layout))
+        reward_acum = 0
+        for action in greedy_actions:
+            new_state, _, done = env.step(layout, action)
+            actions_i.append(action)
+
+            # Calculamos malas posiciones estado actual y siguiente
+            BP_i  = len( env.get_bad_positions(current_state))
+            BP_i_ = len( env.get_bad_positions(new_state))
+
+            # Calculamos recompensa inmediata
+            if done: reward = -len(greedy_actions) - 1
+            else   : reward = (BP_i - BP_i_) - 1
+            
+            #print(f'# {done}-> Rwds_acum: {reward_acum} - Rwds: {reward}')
+            reward_acum += reward
+
+            Vs = actor_critic.critic_predict(current_state)
+            Vs_ = actor_critic.critic_predict(new_state)    # Valor estado siguiente
+            
+            current_state = new_state
+            states_i.append(copy.deepcopy(current_state))
+            rewards_i.append(reward_acum)
+
+            advantages_i.append(reward + gamma * Vs_ - Vs)
+        
+        data['states'].append(states_i)
+        data['actions'].append(actions_i)
+        data['advantages'].append(advantages_i)
+        data['rewards'].append(rewards_i)
+
+    df = pd.DataFrame(data, columns=['states','actions','advantages','rewards'])
+    df.to_csv('data\\data.csv', index=None)
+ 
+    X = df[['states','advantages']]
+    y = df[['actions','rewards']]
+
+    X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=0.3, random_state=42)
+    X_train.to_csv('data\\x_train.csv',index=None)
+    X_test.to_csv('data\\x_test.csv',index=None)
+    y_train.to_csv('data\\y_train.csv',index=None)
+    y_test.to_csv('data\\y_test.csv',index=None)
+
+    return X_train,X_test,y_train,y_test
 
 def generate_data_greedy(n=10000, columns=7, rows=7, Nmin=20, Nmax=35):
     states = []
@@ -98,7 +164,7 @@ def generate_data_greedy(n=10000, columns=7, rows=7, Nmin=20, Nmax=35):
     index_list = [(i,j) for i in range(rows) for j in range(columns) if i != j]
     df_numpy = []
     for i in range(len(states)):
-        st = generate_ann_state_lm(states[i], rows)
+        st =  (states[i], rows)
         index_move = index_list.index( tuple(moves[i]) ) #[(0,1), (0,2)...]
         
         # Crear vector de -1, con max valor 0 -> [-1,-1,...,0,-1]
