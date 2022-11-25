@@ -33,10 +33,10 @@ def generate_ann_state_lm(yard, H, last_move=None):
     n_rows      = len(yard)
     yard        = copy.deepcopy(yard)
     max_item    = max(set().union(*yard))
-    #max_item   = max([max(stack) for stack in yard])
-    stackValues = getStackValues(yard)  # well-placed
-    stacksLen   = getStackLen(yard)
-    topStacks   = getTopStacks(yard, max_item)
+    # #max_item   = max([max(stack) for stack in yard])
+    # stackValues = getStackValues(yard)  # well-placed
+    # stacksLen   = getStackLen(yard)
+    # topStacks   = getTopStacks(yard, max_item)
     yard        = compactState(yard)
     yard        = elevateState(yard, H, max_item)
     yard        = flattenState(yard)
@@ -105,7 +105,7 @@ def generate_data_a2c(n=1000,actor_critic=None,rows=7,columns=7,a2c_step=1):
 
             Vs = actor_critic.critic_predict(current_state)
             Vs_ = actor_critic.critic_predict(new_state)    # Valor estado siguiente
-            
+
             current_state = new_state
             states_i.append(copy.deepcopy(current_state))
             rewards_i.append(reward_acum)
@@ -118,7 +118,7 @@ def generate_data_a2c(n=1000,actor_critic=None,rows=7,columns=7,a2c_step=1):
         data['rewards'].append(rewards_i)
 
     df = pd.DataFrame(data, columns=['states','actions','advantages','rewards'])
-    df.to_csv('data\\data.csv', index=None)
+    df.to_csv('data\data.csv', index=None)
  
     X = df[['states','advantages']]
     y = df[['actions','rewards']]

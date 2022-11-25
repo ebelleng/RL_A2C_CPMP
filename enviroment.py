@@ -1,6 +1,7 @@
 import random
 from layout import Layout
-
+from greedy import greedy_solve
+import copy
 
 class Enviroment():
     def __init__(self, S, H):
@@ -21,18 +22,27 @@ class Enviroment():
         self.layout = Layout(stacks, self.H)
         return self.layout
 
-    def step(self,layout, action):
-        
+    def step(self, action):
         stack_source, stack_destination = action
-        layout.move(stack_source, stack_destination)
-        
-        new_state = layout.stacks
-        reward = -1
+        current_state = self.layout.stacks
+        greedy_actions = greedy_solve(copy.deepcopy(self.layout)) 
+
+        self.layout.move(stack_source, stack_destination)
+        new_state = self.layout.stacks
+
+        # Calculamos malas posiciones estado actual y siguiente
+        BP_i  = len( self.get_bad_positions(current_state))
+        BP_i_ = len( self.get_bad_positions(new_state))
+
+        # Calculamos recompensa inmediata
+        reward = (BP_i - BP_i_) - 1
         done = 1
 
-        if False in self.is_sorted_stacks(layout):
+        if False in self.is_sorted_stacks(self.layout):
             done = 0
-                
+        else:
+            reward = -len(greedy_actions) - 1
+            
         return (new_state, reward, done)
 
     def is_valid_layout(self,layout):
